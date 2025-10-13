@@ -2,220 +2,625 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Pro MU Logger (IndexedDB)</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>MU Logger | Raw Motion + GPS Data</title>
     <style>
+        * {
+            box-sizing: border-box;
+        }
         :root {
-            --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
-            --accent: #38bdf8; --danger: #ef4444; --success: #10b981;
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #f8fafc;
+            --accent: #38bdf8;
+            --danger: #ef4444;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --muted: #64748b;
         }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: var(--bg); color: var(--text);
-            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
         }
-        .container { width: 100%; max-width: 500px; }
+        .container {
+            width: 100%;
+            max-width: 560px;
+        }
         .card {
-            background: var(--card); padding: 20px; border-radius: 12px;
-            margin-bottom: 20px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            background: var(--card);
+            padding: 20px;
+            border-radius: 24px;
+            margin-bottom: 20px;
+            box-shadow: 0 20px 25px -12px rgba(0, 0, 0, 0.3);
+            backdrop-filter: blur(2px);
         }
-        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: 'Courier New', monospace; }
-        .val { color: var(--accent); font-weight: bold; }
-        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px 16px;
+            font-family: 'JetBrains Mono', 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        .stat-item {
+            background: rgba(0,0,0,0.2);
+            border-radius: 12px;
+            padding: 6px 8px;
+        }
+        .val {
+            color: var(--accent);
+            font-weight: bold;
+            font-size: 1.1rem;
+        }
+        .gps-panel {
+            grid-column: span 2;
+            background: #0f172a80;
+            border-radius: 16px;
+            padding: 8px 12px;
+            margin-top: 8px;
+            font-size: 0.8rem;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            gap: 8px;
+        }
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
         button {
-            padding: 14px; border: none; border-radius: 8px;
-            font-weight: 700; cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+            padding: 14px 12px;
+            border: none;
+            border-radius: 60px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: transform 0.12s, opacity 0.2s;
+            font-size: 1rem;
         }
-        button:active { transform: scale(0.98); }
+        button:active { transform: scale(0.97); }
         #startBtn { background-color: var(--accent); color: var(--bg); grid-column: span 2; }
         #stopBtn { background-color: var(--danger); color: white; }
         #downloadBtn { background-color: var(--success); color: white; }
-        #clearBtn { background-color: #64748b; color: white; grid-column: span 2; margin-top: 10px; }
-        button:disabled { opacity: 0.3; cursor: not-allowed; }
-        .log-count { text-align: center; margin-top: 15px; font-size: 0.85rem; color: #94a3b8; }
-        .status-dot { height: 10px; width: 10px; background-color: #475569; border-radius: 50%; display: inline-block; margin-right: 5px; }
-        .active-dot { background-color: var(--danger); animation: pulse 1s infinite; }
-        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+        #clearBtn { background-color: var(--muted); color: white; grid-column: span 2; margin-top: 6px; }
+        button:disabled { opacity: 0.4; transform: none; cursor: not-allowed; }
+        .log-count {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 0.85rem;
+            background: #0f172a;
+            display: inline-block;
+            width: auto;
+            padding: 6px 16px;
+            border-radius: 40px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .status-bar {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #0f172a80;
+            padding: 6px 16px;
+            border-radius: 60px;
+        }
+        .status-dot {
+            height: 12px;
+            width: 12px;
+            background-color: #475569;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .active-dot {
+            background-color: var(--danger);
+            box-shadow: 0 0 8px #ef4444;
+            animation: pulse 1.2s infinite;
+        }
+        @keyframes pulse {
+            0% { opacity: 1; transform: scale(1);}
+            50% { opacity: 0.5; transform: scale(1.2);}
+            100% { opacity: 1; transform: scale(1);}
+        }
+        .gps-badge {
+            font-size: 0.7rem;
+            background: #10b98120;
+            padding: 2px 8px;
+            border-radius: 20px;
+        }
+        .footer-note {
+            font-size: 0.7rem;
+            text-align: center;
+            color: #94a3b8;
+            margin-top: 10px;
+        }
+        .section-title {
+            margin-bottom: 14px;
+            font-weight: 600;
+            display: flex;
+            justify-content: space-between;
+        }
+        hr {
+            border-color: #334155;
+            margin: 10px 0;
+        }
     </style>
 </head>
 <body>
-
 <div class="container">
-    <div style="display: flex; align-items: center; justify-content: space-between;">
-        <h1>MU Logger</h1>
-        <div id="statusIndicator"><span class="status-dot" id="dot"></span><span id="statusText">Idle</span></div>
-    </div>
-    
-    <div class="card">
-        <div class="stats">
-            <div>Acc X: <span class="val" id="ax">0.00</span></div>
-            <div>Acc Y: <span class="val" id="ay">0.00</span></div>
-            <div>Acc Z: <span class="val" id="az">0.00</span></div>
-            <div>Rot α: <span class="val" id="ra">0.00</span></div>
-            <div>Rot β: <span class="val" id="rb">0.00</span></div>
-            <div>Rot γ: <span class="val" id="rg">0.00</span></div>
-            <div>Lat: <span class="val" id="lat">0.000000</span></div>
-            <div>Lon: <span class="val" id="lon">0.000000</span></div>
+    <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; flex-wrap: wrap; gap: 12px;">
+        <h1 style="margin:0;">MU Logger</h1>
+        <div class="status-bar">
+            <span class="status-dot" id="dot"></span>
+            <span id="statusText">Idle</span>
         </div>
-        <div class="log-count">Database Records: <span id="count">0</span></div>
+    </div>
+
+    <div class="card">
+        <div class="section-title">
+            <span>SENSOR DATA</span>
+            <span class="gps-badge" id="gpsSourceBadge">GPS waiting</span>
+        </div>
+        <div class="stats">
+            <div class="stat-item">Acc X: <span class="val" id="ax">0.00</span></div>
+            <div class="stat-item">Acc Y: <span class="val" id="ay">0.00</span></div>
+            <div class="stat-item">Acc Z: <span class="val" id="az">0.00</span></div>
+            <div class="stat-item">Rot α: <span class="val" id="ra">0.00</span></div>
+            <div class="stat-item">Rot β: <span class="val" id="rb">0.00</span></div>
+            <div class="stat-item">Rot γ: <span class="val" id="rg">0.00</span></div>
+            <div class="stat-item">Latitude: <span class="val" id="lat">---</span></div>
+            <div class="stat-item">Longitude: <span class="val" id="lon">---</span></div>
+            <div class="gps-panel" id="gpsDataPanel">
+                <span>Accuracy: <strong id="accuracyMeters">—</strong> m (68% radius)</span>
+                <span>Altitude: <strong id="altitude">—</strong> m</span>
+                <span>Speed: <strong id="speed">—</strong> m/s</span>
+                <span>Heading: <strong id="heading">—</strong> deg</span>
+            </div>
+        </div>
+        <div class="log-count" style="margin-top: 16px;">
+            DB Records: <span id="count" style="font-weight: bold; color:var(--accent);">0</span>
+        </div>
     </div>
 
     <div class="controls">
-        <button id="startBtn">Start Recording</button>
-        <button id="stopBtn" disabled>Stop</button>
-        <button id="downloadBtn">Export CSV</button>
-        <button id="clearBtn">Clear Database</button>
+        <button id="startBtn">START RECORDING</button>
+        <button id="stopBtn" disabled>STOP</button>
+        <button id="downloadBtn">EXPORT CSV</button>
+        <button id="clearBtn">CLEAR DATABASE</button>
+    </div>
+    <div class="footer-note">
+        Raw data logging only — no computed values. Latitude/longitude come directly from GPS hardware.<br>
+        Accuracy = horizontal error radius (meters) at 68% confidence. Lower = more precise.
     </div>
 </div>
 
 <script>
-    const DB_NAME = "MULoggerDB";
-    const STORE_NAME = "motion_logs";
-    let db;
+    // =========================================================================
+    // RAW DATA LOGGER - NO COMPUTATIONS, NO DERIVED VALUES
+    // Logs exactly what sensors and GPS provide
+    // =========================================================================
+    
+    const DB_NAME = "MULogger_RawDB";
+    const STORE_NAME = "raw_sensor_logs";
+    let db = null;
     let isLogging = false;
-    let watchId = null;
-    let currentLat = 0;
-    let currentLon = 0;
-
-    // UI Elements
-    const elements = {
-        ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
-        ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
-        lat: document.getElementById('lat'), lon: document.getElementById('lon'),
-        count: document.getElementById('count'), dot: document.getElementById('dot'),
-        status: document.getElementById('statusText'), start: document.getElementById('startBtn'),
-        stop: document.getElementById('stopBtn'), download: document.getElementById('downloadBtn'),
-        clear: document.getElementById('clearBtn')
+    let motionHandler = null;
+    let geoWatchId = null;
+    
+    // Current GPS state - raw values only
+    let currentGps = {
+        lat: null,
+        lon: null,
+        accuracy: null,
+        altitude: null,
+        altitudeAccuracy: null,
+        speed: null,
+        heading: null,
+        gpsTimestamp: null
     };
-
-    // Initialize IndexedDB
-    const request = indexedDB.open(DB_NAME, 1);
-    request.onupgradeneeded = (e) => {
-        db = e.target.result;
-        if (!db.objectStoreNames.contains(STORE_NAME)) {
-            db.createObjectStore(STORE_NAME, { autoIncrement: true });
+    
+    // UI update - display raw values without modification
+    function updateGpsUI() {
+        const latEl = document.getElementById('lat');
+        const lonEl = document.getElementById('lon');
+        const accEl = document.getElementById('accuracyMeters');
+        const altEl = document.getElementById('altitude');
+        const speedEl = document.getElementById('speed');
+        const headingEl = document.getElementById('heading');
+        
+        if (currentGps.lat !== null && currentGps.lon !== null) {
+            latEl.textContent = currentGps.lat.toFixed(7);
+            lonEl.textContent = currentGps.lon.toFixed(7);
+        } else {
+            latEl.textContent = "---";
+            lonEl.textContent = "---";
         }
-    };
-    request.onsuccess = (e) => {
-        db = e.target.result;
-        updateCountDisplay();
-    };
-
-    async function requestPermissions() {
-        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            const response = await DeviceMotionEvent.requestPermission();
-            return response === 'granted';
+        
+        if (currentGps.accuracy !== null && !isNaN(currentGps.accuracy)) {
+            accEl.textContent = currentGps.accuracy.toFixed(2);
+        } else {
+            accEl.textContent = "—";
         }
-        return true;
+        
+        if (currentGps.altitude !== null && !isNaN(currentGps.altitude)) {
+            altEl.textContent = currentGps.altitude.toFixed(2);
+        } else {
+            altEl.textContent = "—";
+        }
+        
+        if (currentGps.speed !== null && !isNaN(currentGps.speed)) {
+            speedEl.textContent = currentGps.speed.toFixed(2);
+        } else {
+            speedEl.textContent = "—";
+        }
+        
+        if (currentGps.heading !== null && !isNaN(currentGps.heading)) {
+            headingEl.textContent = currentGps.heading.toFixed(1);
+        } else {
+            headingEl.textContent = "—";
+        }
+        
+        // Update status badge
+        const badge = document.getElementById('gpsSourceBadge');
+        if (currentGps.lat !== null && currentGps.accuracy !== null) {
+            badge.innerHTML = `GPS active (${currentGps.accuracy.toFixed(1)}m)`;
+            badge.style.backgroundColor = "#10b98130";
+        } else if (currentGps.lat !== null) {
+            badge.innerHTML = "GPS (accuracy pending)";
+            badge.style.backgroundColor = "#f59e0b30";
+        } else {
+            badge.innerHTML = "Waiting for GPS lock";
+            badge.style.backgroundColor = "#64748b30";
+        }
     }
-
-    function logData(event) {
-        if (!isLogging) return;
-
-        const data = {
-            ts: Date.now(),
-            ax: event.accelerationIncludingGravity.x?.toFixed(4) || 0,
-            ay: event.accelerationIncludingGravity.y?.toFixed(4) || 0,
-            az: event.accelerationIncludingGravity.z?.toFixed(4) || 0,
-            ra: event.rotationRate?.alpha?.toFixed(4) || 0,
-            rb: event.rotationRate?.beta?.toFixed(4) || 0,
-            rg: event.rotationRate?.gamma?.toFixed(4) || 0,
-            lat: currentLat,
-            lon: currentLon
+    
+    // =========================================================================
+    // GPS WATCHER - Raw hardware data only
+    // =========================================================================
+    function startHighAccuracyGPS() {
+        if (!navigator.geolocation) {
+            console.warn("Geolocation not supported");
+            const panel = document.getElementById('gpsDataPanel');
+            panel.innerHTML += "<span style='color:red'> GPS not supported</span>";
+            return;
+        }
+        
+        if (geoWatchId !== null) {
+            navigator.geolocation.clearWatch(geoWatchId);
+        }
+        
+        const options = {
+            enableHighAccuracy: true,   // Force GPS hardware
+            timeout: 15000,
+            maximumAge: 2000
         };
-
-        // UI Update
-        elements.ax.textContent = data.ax; elements.ay.textContent = data.ay; elements.az.textContent = data.az;
-        elements.ra.textContent = data.ra; elements.rb.textContent = data.rb; elements.rg.textContent = data.rg;
-
-        // DB Save
-        const transaction = db.transaction([STORE_NAME], "readwrite");
-        transaction.objectStore(STORE_NAME).add(data);
+        
+        geoWatchId = navigator.geolocation.watchPosition(
+            (position) => {
+                const coords = position.coords;
+                if (!coords || typeof coords.latitude !== 'number') return;
+                
+                // Reject invalid zero coordinates (initial invalid state)
+                if (Math.abs(coords.latitude) < 0.000001 && Math.abs(coords.longitude) < 0.000001) return;
+                
+                // Only accept positions that have accuracy (GPS provides this)
+                if (typeof coords.accuracy !== 'number') return;
+                
+                // Store raw GPS values exactly as received from hardware
+                currentGps.lat = coords.latitude;
+                currentGps.lon = coords.longitude;
+                currentGps.accuracy = coords.accuracy;
+                currentGps.altitude = (typeof coords.altitude === 'number') ? coords.altitude : null;
+                currentGps.altitudeAccuracy = (typeof coords.altitudeAccuracy === 'number') ? coords.altitudeAccuracy : null;
+                currentGps.speed = (typeof coords.speed === 'number') ? coords.speed : null;
+                currentGps.heading = (typeof coords.heading === 'number') ? coords.heading : null;
+                currentGps.gpsTimestamp = position.timestamp;
+                
+                updateGpsUI();
+            },
+            (error) => {
+                console.warn("GPS error:", error.message);
+                let errorMsg = "";
+                switch(error.code) {
+                    case error.PERMISSION_DENIED: errorMsg = "Permission denied";
+                        break;
+                    case error.POSITION_UNAVAILABLE: errorMsg = "GPS unavailable";
+                        break;
+                    case error.TIMEOUT: errorMsg = "Timeout";
+                        break;
+                    default: errorMsg = error.message;
+                }
+                if (!currentGps.lat) {
+                    document.getElementById('lat').textContent = "waiting";
+                    document.getElementById('lon').textContent = "waiting";
+                }
+            },
+            options
+        );
     }
-
-    function updateCountDisplay() {
-        const transaction = db.transaction([STORE_NAME], "readonly");
-        const countRequest = transaction.objectStore(STORE_NAME).count();
-        countRequest.onsuccess = () => elements.count.textContent = countRequest.result;
+    
+    function stopGPS() {
+        if (geoWatchId !== null) {
+            navigator.geolocation.clearWatch(geoWatchId);
+            geoWatchId = null;
+        }
     }
-
-    elements.start.onclick = async () => {
-        if (await requestPermissions()) {
-            isLogging = true;
-            window.addEventListener('devicemotion', logData);
-            
-            if ("geolocation" in navigator) {
-                watchId = navigator.geolocation.watchPosition((pos) => {
-                    currentLat = pos.coords.latitude.toFixed(6);
-                    currentLon = pos.coords.longitude.toFixed(6);
-                    elements.lat.textContent = currentLat;
-                    elements.lon.textContent = currentLon;
-                }, (err) => {
-                    console.warn("GPS error:", err.message);
-                }, { enableHighAccuracy: true });
+    
+    // =========================================================================
+    // MOTION PERMISSION (iOS)
+    // =========================================================================
+    async function requestMotionPermission() {
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            try {
+                const response = await DeviceMotionEvent.requestPermission();
+                return response === 'granted';
+            } catch(e) {
+                console.warn("Motion permission error:", e);
+                return false;
             }
-
-            elements.start.disabled = true;
-            elements.stop.disabled = false;
-            elements.dot.classList.add('active-dot');
-            elements.status.textContent = "Recording...";
-            // Update count every second while recording
-            this.counterInterval = setInterval(updateCountDisplay, 1000);
         }
-    };
-
-    elements.stop.onclick = () => {
-        isLogging = false;
-        window.removeEventListener('devicemotion', logData);
-        if (watchId !== null) {
-            navigator.geolocation.clearWatch(watchId);
-            watchId = null;
-        }
-
-        clearInterval(this.counterInterval);
-        elements.start.disabled = false;
-        elements.stop.disabled = true;
-        elements.dot.classList.remove('active-dot');
-        elements.status.textContent = "Stopped";
-        updateCountDisplay();
-    };
-
-    elements.clear.onclick = () => {
-        if (!confirm("Delete all logged data?")) return;
+        return true; // Android / already granted
+    }
+    
+    // =========================================================================
+    // MOTION EVENT HANDLER - Logs raw sensor values
+    // =========================================================================
+    function handleMotionEvent(event) {
+        if (!isLogging) return;
+        if (!db) return;
+        
+        // Get raw acceleration values (including gravity)
+        const acc = event.accelerationIncludingGravity || event.acceleration || {x: 0, y: 0, z: 0};
+        const rot = event.rotationRate || {alpha: 0, beta: 0, gamma: 0};
+        
+        // Get current raw GPS values (null if not available)
+        let recordLat = (currentGps.lat !== null && !isNaN(currentGps.lat)) ? currentGps.lat : null;
+        let recordLon = (currentGps.lon !== null && !isNaN(currentGps.lon)) ? currentGps.lon : null;
+        
+        // Build data object with raw values only - NO COMPUTATIONS
+        const data = {
+            // Timestamp of this log entry (ms since epoch)
+            log_timestamp_ms: Date.now(),
+            
+            // Accelerometer (raw, including gravity, units: m/s²)
+            acc_x: (acc.x !== null && acc.x !== undefined) ? acc.x : 0,
+            acc_y: (acc.y !== null && acc.y !== undefined) ? acc.y : 0,
+            acc_z: (acc.z !== null && acc.z !== undefined) ? acc.z : 0,
+            
+            // Gyroscope rotation rate (raw, units: deg/s)
+            rot_alpha: (rot.alpha !== null && rot.alpha !== undefined) ? rot.alpha : 0,
+            rot_beta: (rot.beta !== null && rot.beta !== undefined) ? rot.beta : 0,
+            rot_gamma: (rot.gamma !== null && rot.gamma !== undefined) ? rot.gamma : 0,
+            
+            // GPS Position (from hardware only)
+            latitude: recordLat,
+            longitude: recordLon,
+            
+            // GPS Accuracy Metrics (raw from chip)
+            gps_accuracy_horizontal_meters: currentGps.accuracy,      // 68% confidence radius
+            gps_altitude_meters: currentGps.altitude,
+            gps_altitude_accuracy_meters: currentGps.altitudeAccuracy,
+            gps_speed_meters_per_second: currentGps.speed,
+            gps_heading_degrees: currentGps.heading,                  // 0-360, relative to true north
+            gps_hardware_timestamp_ms: currentGps.gpsTimestamp
+        };
+        
+        // Update live UI for accelerometer/gyro (raw display)
+        document.getElementById('ax').textContent = data.acc_x.toFixed(4);
+        document.getElementById('ay').textContent = data.acc_y.toFixed(4);
+        document.getElementById('az').textContent = data.acc_z.toFixed(4);
+        document.getElementById('ra').textContent = data.rot_alpha.toFixed(4);
+        document.getElementById('rb').textContent = data.rot_beta.toFixed(4);
+        document.getElementById('rg').textContent = data.rot_gamma.toFixed(4);
+        
+        // Write to IndexedDB
         const transaction = db.transaction([STORE_NAME], "readwrite");
-        transaction.objectStore(STORE_NAME).clear();
-        transaction.oncomplete = () => updateCountDisplay();
-    };
-
-    elements.download.onclick = () => {
-        const transaction = db.transaction([STORE_NAME], "readonly");
         const store = transaction.objectStore(STORE_NAME);
-        const getAllRequest = store.getAll();
-
-        elements.status.textContent = "Exporting...";
-
-        getAllRequest.onsuccess = () => {
-            const data = getAllRequest.result;
-            if (data.length === 0) return alert("No data to export");
-
-            // CSV Generation
-            const headers = "timestamp,acc_x,acc_y,acc_z,rot_alpha,rot_beta,rot_gamma,latitude,longitude\n";
-            const csvRows = data.map(row => 
-                `${row.ts},${row.ax},${row.ay},${row.az},${row.ra},${row.rb},${row.rg},${row.lat},${row.lon}`
-            ).join("\n");
-
-            const blob = new Blob([headers + csvRows], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
+        store.add(data);
+    }
+    
+    // =========================================================================
+    // DATABASE FUNCTIONS
+    // =========================================================================
+    function updateRecordCount() {
+        if (!db) return;
+        const transaction = db.transaction([STORE_NAME], "readonly");
+        const countReq = transaction.objectStore(STORE_NAME).count();
+        countReq.onsuccess = () => {
+            document.getElementById('count').textContent = countReq.result;
+        };
+    }
+    
+    let countInterval = null;
+    
+    function initDB() {
+        return new Promise((resolve, reject) => {
+            const openReq = indexedDB.open(DB_NAME, 4);
+            openReq.onupgradeneeded = (e) => {
+                const dbRef = e.target.result;
+                if (!dbRef.objectStoreNames.contains(STORE_NAME)) {
+                    const store = dbRef.createObjectStore(STORE_NAME, { autoIncrement: true });
+                    store.createIndex("by_timestamp", "log_timestamp_ms");
+                }
+            };
+            openReq.onsuccess = (e) => {
+                db = e.target.result;
+                updateRecordCount();
+                resolve(db);
+            };
+            openReq.onerror = (e) => reject(e);
+        });
+    }
+    
+    // =========================================================================
+    // EXPORT TO CSV
+    // =========================================================================
+    function exportToCSV() {
+        if (!db) return;
+        const tx = db.transaction([STORE_NAME], "readonly");
+        const store = tx.objectStore(STORE_NAME);
+        const getAll = store.getAll();
+        
+        getAll.onsuccess = () => {
+            const rows = getAll.result;
+            if (!rows.length) {
+                alert("No data logged. Start recording first.");
+                return;
+            }
+            
+            // CSV headers - all raw fields, nothing computed
+            const headers = [
+                "log_timestamp_ms",
+                "acc_x_mps2",
+                "acc_y_mps2",
+                "acc_z_mps2",
+                "rot_alpha_deg_per_s",
+                "rot_beta_deg_per_s",
+                "rot_gamma_deg_per_s",
+                "latitude",
+                "longitude",
+                "gps_accuracy_horizontal_meters",
+                "gps_altitude_meters",
+                "gps_altitude_accuracy_meters",
+                "gps_speed_meters_per_second",
+                "gps_heading_degrees",
+                "gps_hardware_timestamp_ms"
+            ].join(",");
+            
+            const csvLines = rows.map(row => {
+                return [
+                    row.log_timestamp_ms,
+                    row.acc_x, row.acc_y, row.acc_z,
+                    row.rot_alpha, row.rot_beta, row.rot_gamma,
+                    (row.latitude !== null && row.latitude !== undefined) ? row.latitude : "",
+                    (row.longitude !== null) ? row.longitude : "",
+                    (row.gps_accuracy_horizontal_meters !== null && row.gps_accuracy_horizontal_meters !== undefined) ? row.gps_accuracy_horizontal_meters : "",
+                    (row.gps_altitude_meters !== null) ? row.gps_altitude_meters : "",
+                    (row.gps_altitude_accuracy_meters !== null) ? row.gps_altitude_accuracy_meters : "",
+                    (row.gps_speed_meters_per_second !== null) ? row.gps_speed_meters_per_second : "",
+                    (row.gps_heading_degrees !== null) ? row.gps_heading_degrees : "",
+                    (row.gps_hardware_timestamp_ms !== null) ? row.gps_hardware_timestamp_ms : ""
+                ].join(",");
+            });
+            
+            const csvContent = [headers, ...csvLines].join("\n");
+            const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.style.display = 'none';
             a.href = url;
-            a.download = `MU_Export_${new Date().toISOString().slice(0,19)}.csv`;
+            const filename = `raw_sensor_log_${new Date().toISOString().slice(0,19).replace(/:/g, '-')}.csv`;
+            a.download = filename;
             document.body.appendChild(a);
             a.click();
-            window.URL.revokeObjectURL(url);
-            elements.status.textContent = "Exported";
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            
+            statusSpan.textContent = "Exported";
+            setTimeout(() => {
+                if (!isLogging && statusSpan.textContent === "Exported") statusSpan.textContent = "Idle";
+                else if (isLogging) statusSpan.textContent = "Recording...";
+            }, 1800);
         };
+        
+        getAll.onerror = () => {
+            alert("Error reading database");
+        };
+    }
+    
+    // =========================================================================
+    // UI CONTROLS
+    // =========================================================================
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const clearBtn = document.getElementById('clearBtn');
+    const statusSpan = document.getElementById('statusText');
+    const dotSpan = document.getElementById('dot');
+    
+    startBtn.onclick = async () => {
+        const motionOk = await requestMotionPermission();
+        if (!motionOk) {
+            alert("Motion permission required. Please allow device motion.");
+            return;
+        }
+        
+        if (isLogging) return;
+        
+        // Start or restart GPS with high accuracy
+        if (!geoWatchId) {
+            startHighAccuracyGPS();
+        } else {
+            stopGPS();
+            startHighAccuracyGPS();
+        }
+        
+        // Attach motion event listener
+        if (motionHandler) window.removeEventListener('devicemotion', motionHandler);
+        motionHandler = handleMotionEvent;
+        window.addEventListener('devicemotion', motionHandler);
+        
+        isLogging = true;
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+        dotSpan.classList.add('active-dot');
+        statusSpan.textContent = "Recording...";
+        
+        if (countInterval) clearInterval(countInterval);
+        countInterval = setInterval(() => updateRecordCount(), 1200);
     };
+    
+    stopBtn.onclick = () => {
+        if (!isLogging) return;
+        
+        isLogging = false;
+        if (motionHandler) window.removeEventListener('devicemotion', motionHandler);
+        motionHandler = null;
+        
+        startBtn.disabled = false;
+        stopBtn.disabled = true;
+        dotSpan.classList.remove('active-dot');
+        statusSpan.textContent = "Stopped";
+        
+        if (countInterval) clearInterval(countInterval);
+        updateRecordCount();
+        updateGpsUI();
+    };
+    
+    clearBtn.onclick = () => {
+        if (!db) return;
+        if (confirm("Delete ALL logged data? This cannot be undone.")) {
+            const tx = db.transaction([STORE_NAME], "readwrite");
+            tx.objectStore(STORE_NAME).clear();
+            tx.oncomplete = () => {
+                updateRecordCount();
+                statusSpan.textContent = "Cleared";
+                setTimeout(() => {
+                    if (!isLogging && statusSpan.textContent === "Cleared") statusSpan.textContent = "Idle";
+                    else if (isLogging) statusSpan.textContent = "Recording...";
+                }, 1200);
+            };
+        }
+    };
+    
+    downloadBtn.onclick = () => {
+        exportToCSV();
+    };
+    
+    // =========================================================================
+    // INITIALIZATION
+    // =========================================================================
+    initDB().then(() => {
+        startHighAccuracyGPS();
+        updateGpsUI();
+        // Periodically refresh count display
+        setInterval(() => {
+            if (db) updateRecordCount();
+        }, 3000);
+    }).catch(e => console.error("Database initialization failed:", e));
 </script>
 </body>
 </html>
