@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro MU Logger (IndexedDB)</title>
+    <style>
+        :root {
+            --bg: #0f172a; --card: #1e293b; --text: #f8fafc;
+            --accent: #38bdf8; --danger: #ef4444; --success: #10b981;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg); color: var(--text);
+            margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center;
+        }
+        .container { width: 100%; max-width: 500px; }
+        .card {
+            background: var(--card); padding: 20px; border-radius: 12px;
+            margin-bottom: 20px; box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        .stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; font-family: 'Courier New', monospace; }
+        .val { color: var(--accent); font-weight: bold; }
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        button {
+            padding: 14px; border: none; border-radius: 8px;
+            font-weight: 700; cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+        }
+        button:active { transform: scale(0.98); }
+        #startBtn { background-color: var(--accent); color: var(--bg); grid-column: span 2; }
+        #stopBtn { background-color: var(--danger); color: white; }
+        #downloadBtn { background-color: var(--success); color: white; }
+        #clearBtn { background-color: #64748b; color: white; grid-column: span 2; margin-top: 10px; }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        .log-count { text-align: center; margin-top: 15px; font-size: 0.85rem; color: #94a3b8; }
+        .status-dot { height: 10px; width: 10px; background-color: #475569; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .active-dot { background-color: var(--danger); animation: pulse 1s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.4; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+        <h1>MU Logger</h1>
+        <div id="statusIndicator"><span class="status-dot" id="dot"></span><span id="statusText">Idle</span></div>
+    </div>
+    
+    <div class="card">
+        <div class="stats">
+            <div>Acc X: <span class="val" id="ax">0.00</span></div>
+            <div>Acc Y: <span class="val" id="ay">0.00</span></div>
+            <div>Acc Z: <span class="val" id="az">0.00</span></div>
+            <div>Rot α: <span class="val" id="ra">0.00</span></div>
+            <div>Rot β: <span class="val" id="rb">0.00</span></div>
+            <div>Rot γ: <span class="val" id="rg">0.00</span></div>
+        </div>
+        <div class="log-count">Database Records: <span id="count">0</span></div>
+    </div>
+
+    <div class="controls">
+        <button id="startBtn">Start Recording</button>
+        <button id="stopBtn" disabled>Stop</button>
+        <button id="downloadBtn">Export CSV</button>
+        <button id="clearBtn">Clear Database</button>
+    </div>
+</div>
+
+<script>
+    const DB_NAME = "MULoggerDB";
+    const STORE_NAME = "motion_logs";
+    let db;
+    let isLogging = false;
+
+    // UI Elements
+    const elements = {
+        ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
+        ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
+        count: document.getElementById('count'), dot: document.getElementById('dot'),
+        status: document.getElementById('statusText'), start: document.getElementById('startBtn'),
+        stop: document.getElementById('stopBtn'), download: document.getElementById('downloadBtn'),
+        clear: document.getElementById('clearBtn')
+    };
+
+    // Initialize IndexedDB
+    const request = indexedDB.open(DB_NAME, 1);
+    request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains(STORE_NAME)) {
+            db.createObjectStore(STORE_NAME, { autoIncrement: true });
+        }
+    };
+    request.onsuccess = (e) => {
+        db = e.target.result;
+        updateCountDisplay();
+    };
+
+    async function requestPermissions() {
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            const response = await DeviceMotionEvent.requestPermission();
+            return response === 'granted';
+        }
+        return true;
+    }
+
+    function logData(event) {
+        if (!isLogging) return;
+
+        const data = {
+            ts: Date.now(),
+            ax: event.accelerationIncludingGravity.x?.toFixed(4) || 0,
+            ay: event.accelerationIncludingGravity.y?.toFixed(4) || 0,
+            az: event.accelerationIncludingGravity.z?.toFixed(4) || 0,
+            ra: event.rotationRate?.alpha?.toFixed(4) || 0,
+            rb: event.rotationRate?.beta?.toFixed(4) || 0,
+            rg: event.rotationRate?.gamma?.toFixed(4) || 0
+        };
+
+        // UI Update
+        elements.ax.textContent = data.ax; elements.ay.textContent = data.ay; elements.az.textContent = data.az;
+        elements.ra.textContent = data.ra; elements.rb.textContent = data.rb; elements.rg.textContent = data.rg;
+
+        // DB Save
+        const transaction = db.transaction([STORE_NAME], "readwrite");
+        transaction.objectStore(STORE_NAME).add(data);
+    }
+
+    function updateCountDisplay() {
+        const transaction = db.transaction([STORE_NAME], "readonly");
+        const countRequest = transaction.objectStore(STORE_NAME).count();
+        countRequest.onsuccess = () => elements.count.textContent = countRequest.result;
+    }
+
+    elements.start.onclick = async () => {
+        if (await requestPermissions()) {
+            isLogging = true;
+            window.addEventListener('devicemotion', logData);
+            elements.start.disabled = true;
+            elements.stop.disabled = false;
+            elements.dot.classList.add('active-dot');
+            elements.status.textContent = "Recording...";
+            // Update count every second while recording
+            this.counterInterval = setInterval(updateCountDisplay, 1000);
+        }
+    };
+
+    elements.stop.onclick = () => {
+        isLogging = false;
+        window.removeEventListener('devicemotion', logData);
+        clearInterval(this.counterInterval);
+        elements.start.disabled = false;
+        elements.stop.disabled = true;
+        elements.dot.classList.remove('active-dot');
+        elements.status.textContent = "Stopped";
+        updateCountDisplay();
+    };
+
+    elements.clear.onclick = () => {
+        if (!confirm("Delete all logged data?")) return;
+        const transaction = db.transaction([STORE_NAME], "readwrite");
+        transaction.objectStore(STORE_NAME).clear();
+        transaction.oncomplete = () => updateCountDisplay();
+    };
+
+    elements.download.onclick = () => {
+        const transaction = db.transaction([STORE_NAME], "readonly");
+        const store = transaction.objectStore(STORE_NAME);
+        const getAllRequest = store.getAll();
+
+        elements.status.textContent = "Exporting...";
+
+        getAllRequest.onsuccess = () => {
+            const data = getAllRequest.result;
+            if (data.length === 0) return alert("No data to export");
+
+            // CSV Generation
+            const headers = "timestamp,acc_x,acc_y,acc_z,rot_alpha,rot_beta,rot_gamma\n";
+            const csvRows = data.map(row => 
+                `${row.ts},${row.ax},${row.ay},${row.az},${row.ra},${row.rb},${row.rg}`
+            ).join("\n");
+
+            const blob = new Blob([headers + csvRows], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = `MU_Export_${new Date().toISOString().slice(0,19)}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            elements.status.textContent = "Exported";
+        };
+    };
+</script>
+</body>
+</html>
