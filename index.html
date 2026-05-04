@@ -54,6 +54,8 @@
             <div>Rot α: <span class="val" id="ra">0.00</span></div>
             <div>Rot β: <span class="val" id="rb">0.00</span></div>
             <div>Rot γ: <span class="val" id="rg">0.00</span></div>
+            <div>Lat: <span class="val" id="lat">0.000000</span></div>
+            <div>Lon: <span class="val" id="lon">0.000000</span></div>
         </div>
         <div class="log-count">Database Records: <span id="count">0</span></div>
     </div>
@@ -71,11 +73,15 @@
     const STORE_NAME = "motion_logs";
     let db;
     let isLogging = false;
+    let watchId = null;
+    let currentLat = 0;
+    let currentLon = 0;
 
     // UI Elements
     const elements = {
         ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
         ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
+        lat: document.getElementById('lat'), lon: document.getElementById('lon'),
         count: document.getElementById('count'), dot: document.getElementById('dot'),
         status: document.getElementById('statusText'), start: document.getElementById('startBtn'),
         stop: document.getElementById('stopBtn'), download: document.getElementById('downloadBtn'),
@@ -113,7 +119,9 @@
             az: event.accelerationIncludingGravity.z?.toFixed(4) || 0,
             ra: event.rotationRate?.alpha?.toFixed(4) || 0,
             rb: event.rotationRate?.beta?.toFixed(4) || 0,
-            rg: event.rotationRate?.gamma?.toFixed(4) || 0
+            rg: event.rotationRate?.gamma?.toFixed(4) || 0,
+            lat: currentLat,
+            lon: currentLon
         };
 
         // UI Update
@@ -135,6 +143,18 @@
         if (await requestPermissions()) {
             isLogging = true;
             window.addEventListener('devicemotion', logData);
+            
+            if ("geolocation" in navigator) {
+                watchId = navigator.geolocation.watchPosition((pos) => {
+                    currentLat = pos.coords.latitude.toFixed(6);
+                    currentLon = pos.coords.longitude.toFixed(6);
+                    elements.lat.textContent = currentLat;
+                    elements.lon.textContent = currentLon;
+                }, (err) => {
+                    console.warn("GPS error:", err.message);
+                }, { enableHighAccuracy: true });
+            }
+
             elements.start.disabled = true;
             elements.stop.disabled = false;
             elements.dot.classList.add('active-dot');
@@ -147,6 +167,11 @@
     elements.stop.onclick = () => {
         isLogging = false;
         window.removeEventListener('devicemotion', logData);
+        if (watchId !== null) {
+            navigator.geolocation.clearWatch(watchId);
+            watchId = null;
+        }
+
         clearInterval(this.counterInterval);
         elements.start.disabled = false;
         elements.stop.disabled = true;
@@ -174,9 +199,9 @@
             if (data.length === 0) return alert("No data to export");
 
             // CSV Generation
-            const headers = "timestamp,acc_x,acc_y,acc_z,rot_alpha,rot_beta,rot_gamma\n";
+            const headers = "timestamp,acc_x,acc_y,acc_z,rot_alpha,rot_beta,rot_gamma,latitude,longitude\n";
             const csvRows = data.map(row => 
-                `${row.ts},${row.ax},${row.ay},${row.az},${row.ra},${row.rb},${row.rg}`
+                `${row.ts},${row.ax},${row.ay},${row.az},${row.ra},${row.rb},${row.rg},${row.lat},${row.lon}`
             ).join("\n");
 
             const blob = new Blob([headers + csvRows], { type: 'text/csv' });
