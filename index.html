@@ -51,11 +51,16 @@
             <div>Acc X: <span class="val" id="ax">0.00</span></div>
             <div>Acc Y: <span class="val" id="ay">0.00</span></div>
             <div>Acc Z: <span class="val" id="az">0.00</span></div>
+            <div>Lin X: <span class="val" id="lx">0.00</span></div>
+            <div>Lin Y: <span class="val" id="ly">0.00</span></div>
+            <div>Lin Z: <span class="val" id="lz">0.00</span></div>
             <div>Rot α: <span class="val" id="ra">0.00</span></div>
             <div>Rot β: <span class="val" id="rb">0.00</span></div>
             <div>Rot γ: <span class="val" id="rg">0.00</span></div>
             <div>Lat: <span class="val" id="lat">0.000000</span></div>
             <div>Lon: <span class="val" id="lon">0.000000</span></div>
+            <div style="grid-column: span 2;">Compass: <span class="val" id="compass">0.00</span>°</div>
+            <div style="grid-column: span 2;">GPS Acc: <span class="val" id="gps_acc">0</span>m</div>
         </div>
         <div class="log-count">Database Records: <span id="count">0</span></div>
     </div>
@@ -76,12 +81,17 @@
     let watchId = null;
     let currentLat = 0;
     let currentLon = 0;
+    let currentAcc = 0;
+    let currentCompass = 0;
 
     // UI Elements
     const elements = {
         ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
+        lx: document.getElementById('lx'), ly: document.getElementById('ly'), lz: document.getElementById('lz'),
         ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
         lat: document.getElementById('lat'), lon: document.getElementById('lon'),
+        compass: document.getElementById('compass'),
+        gps_acc: document.getElementById('gps_acc'),
         count: document.getElementById('count'), dot: document.getElementById('dot'),
         status: document.getElementById('statusText'), start: document.getElementById('startBtn'),
         stop: document.getElementById('stopBtn'), download: document.getElementById('downloadBtn'),
@@ -102,11 +112,11 @@
     };
 
     async function requestPermissions() {
-        if (typeof DeviceMotionEvent.requestPermission === 'function') {
-            const response = await DeviceMotionEvent.requestPermission();
-            return response === 'granted';
-        }
-        return true;
+        const motionRes = (typeof DeviceMotionEvent.requestPermission === 'function') ? 
+            await DeviceMotionEvent.requestPermission() : 'granted';
+        const orientRes = (typeof DeviceOrientationEvent.requestPermission === 'function') ? 
+            await DeviceOrientationEvent.requestPermission() : 'granted';
+        return motionRes === 'granted' && orientRes === 'granted';
     }
 
     function logData(event) {
@@ -117,20 +127,38 @@
             ax: event.accelerationIncludingGravity.x?.toFixed(4) || 0,
             ay: event.accelerationIncludingGravity.y?.toFixed(4) || 0,
             az: event.accelerationIncludingGravity.z?.toFixed(4) || 0,
+            lx: event.acceleration?.x?.toFixed(4) || 0,
+            ly: event.acceleration?.y?.toFixed(4) || 0,
+            lz: event.acceleration?.z?.toFixed(4) || 0,
             ra: event.rotationRate?.alpha?.toFixed(4) || 0,
             rb: event.rotationRate?.beta?.toFixed(4) || 0,
             rg: event.rotationRate?.gamma?.toFixed(4) || 0,
             lat: currentLat,
-            lon: currentLon
+            lon: currentLon,
+            gps_acc: currentAcc,
+            comp: currentCompass
         };
 
         // UI Update
         elements.ax.textContent = data.ax; elements.ay.textContent = data.ay; elements.az.textContent = data.az;
+        elements.lx.textContent = data.lx; elements.ly.textContent = data.ly; elements.lz.textContent = data.lz;
         elements.ra.textContent = data.ra; elements.rb.textContent = data.rb; elements.rg.textContent = data.rg;
 
         // DB Save
         const transaction = db.transaction([STORE_NAME], "readwrite");
         transaction.objectStore(STORE_NAME).add(data);
+    }
+
+    function handleOrientation(event) {
+        if (!isLogging) return;
+        let heading = 0;
+        if (event.webkitCompassHeading) {
+            heading = event.webkitCompassHeading;
+        } else if (event.alpha !== null) {
+            heading = 360 - event.alpha;
+        }
+        currentCompass = heading.toFixed(2);
+        elements.compass.textContent = currentCompass;
     }
 
     function updateCountDisplay() {
@@ -144,12 +172,19 @@
             isLogging = true;
             window.addEventListener('devicemotion', logData);
             
+            // Use absolute orientation if available (mostly for Android/Chrome)
+            const orientationEvent = 'ondeviceorientationabsolute' in window ? 
+                'deviceorientationabsolute' : 'deviceorientation';
+            window.addEventListener(orientationEvent, handleOrientation);
+            
             if ("geolocation" in navigator) {
                 watchId = navigator.geolocation.watchPosition((pos) => {
                     currentLat = pos.coords.latitude.toFixed(6);
                     currentLon = pos.coords.longitude.toFixed(6);
+                    currentAcc = pos.coords.accuracy.toFixed(2);
                     elements.lat.textContent = currentLat;
                     elements.lon.textContent = currentLon;
+                    elements.gps_acc.textContent = currentAcc;
                 }, (err) => {
                     console.warn("GPS error:", err.message);
                 }, { enableHighAccuracy: true });
@@ -167,6 +202,11 @@
     elements.stop.onclick = () => {
         isLogging = false;
         window.removeEventListener('devicemotion', logData);
+        
+        const orientationEvent = 'ondeviceorientationabsolute' in window ? 
+            'deviceorientationabsolute' : 'deviceorientation';
+        window.removeEventListener(orientationEvent, handleOrientation);
+        
         if (watchId !== null) {
             navigator.geolocation.clearWatch(watchId);
             watchId = null;
@@ -199,9 +239,9 @@
             if (data.length === 0) return alert("No data to export");
 
             // CSV Generation
-            const headers = "timestamp,acc_x,acc_y,acc_z,rot_alpha,rot_beta,rot_gamma,latitude,longitude\n";
+            const headers = "timestamp,acc_x,acc_y,acc_z,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,latitude,longitude,gps_accuracy_m,compass_heading\n";
             const csvRows = data.map(row => 
-                `${row.ts},${row.ax},${row.ay},${row.az},${row.ra},${row.rb},${row.rg},${row.lat},${row.lon}`
+                `${row.ts},${row.ax},${row.ay},${row.az},${row.lx},${row.ly},${row.lz},${row.ra},${row.rb},${row.rg},${row.lat},${row.lon},${row.gps_acc},${row.comp}`
             ).join("\n");
 
             const blob = new Blob([headers + csvRows], { type: 'text/csv' });
