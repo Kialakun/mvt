@@ -169,6 +169,9 @@
             <div class="stat-item">Acc X: <span class="val" id="ax">0.00</span></div>
             <div class="stat-item">Acc Y: <span class="val" id="ay">0.00</span></div>
             <div class="stat-item">Acc Z: <span class="val" id="az">0.00</span></div>
+            <div class="stat-item">Lin X: <span class="val" id="lx">0.00</span></div>
+            <div class="stat-item">Lin Y: <span class="val" id="ly">0.00</span></div>
+            <div class="stat-item">Lin Z: <span class="val" id="lz">0.00</span></div>
             <div class="stat-item">Rot α: <span class="val" id="ra">0.00</span></div>
             <div class="stat-item">Rot β: <span class="val" id="rb">0.00</span></div>
             <div class="stat-item">Rot γ: <span class="val" id="rg">0.00</span></div>
@@ -226,6 +229,7 @@
     // UI Elements
     const elements = {
         ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
+        lx: document.getElementById('lx'), ly: document.getElementById('ly'), lz: document.getElementById('lz'),
         ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
         lat: document.getElementById('lat'), lon: document.getElementById('lon'),
         accM: document.getElementById('accuracyMeters'), alt: document.getElementById('altitude'),
@@ -282,6 +286,9 @@
         elements.ax.textContent = data.ax.toFixed(3);
         elements.ay.textContent = data.ay.toFixed(3);
         elements.az.textContent = data.az.toFixed(3);
+        elements.lx.textContent = data.lx.toFixed(3);
+        elements.ly.textContent = data.ly.toFixed(3);
+        elements.lz.textContent = data.lz.toFixed(3);
         elements.ra.textContent = data.ra.toFixed(2);
         elements.rb.textContent = data.rb.toFixed(2);
         elements.rg.textContent = data.rg.toFixed(2);
