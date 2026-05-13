@@ -172,6 +172,9 @@
             <div class="stat-item">Lin X: <span class="val" id="lx">0.00</span></div>
             <div class="stat-item">Lin Y: <span class="val" id="ly">0.00</span></div>
             <div class="stat-item">Lin Z: <span class="val" id="lz">0.00</span></div>
+            <div class="stat-item">Iner X: <span class="val" id="ix">0.00</span></div>
+            <div class="stat-item">Iner Y: <span class="val" id="iy">0.00</span></div>
+            <div class="stat-item">Iner Z: <span class="val" id="iz">0.00</span></div>
             <div class="stat-item">Rot α: <span class="val" id="ra">0.00</span></div>
             <div class="stat-item">Rot β: <span class="val" id="rb">0.00</span></div>
             <div class="stat-item">Rot γ: <span class="val" id="rg">0.00</span></div>
@@ -213,6 +216,7 @@
     let isLogging = false;
     let geoWatchId = null;
     let currentCompass = 0;
+    let currentOri = { a: 0, b: 0, g: 0 };
     let counterInterval = null;
     
     let currentGps = {
@@ -230,6 +234,7 @@
     const elements = {
         ax: document.getElementById('ax'), ay: document.getElementById('ay'), az: document.getElementById('az'),
         lx: document.getElementById('lx'), ly: document.getElementById('ly'), lz: document.getElementById('lz'),
+        ix: document.getElementById('ix'), iy: document.getElementById('iy'), iz: document.getElementById('iz'),
         ra: document.getElementById('ra'), rb: document.getElementById('rb'), rg: document.getElementById('rg'),
         lat: document.getElementById('lat'), lon: document.getElementById('lon'),
         accM: document.getElementById('accuracyMeters'), alt: document.getElementById('altitude'),
@@ -261,8 +266,30 @@
         return mRes === 'granted' && oRes === 'granted';
     }
     
+    // Helper: Mimics Android's getRotationMatrix logic using Euler angles
+    function getRotationMatrix(alpha, beta, gamma) {
+        const deg2rad = Math.PI / 180;
+        const _x = beta  ? beta  * deg2rad : 0; 
+        const _y = gamma ? gamma * deg2rad : 0; 
+        const _z = alpha ? alpha * deg2rad : 0; 
+
+        const cX = Math.cos(_x), sX = Math.sin(_x);
+        const cY = Math.cos(_y), sY = Math.sin(_y);
+        const cZ = Math.cos(_z), sZ = Math.sin(_z);
+
+        return [
+            cZ * cY - sZ * sX * sY, -sZ * cX, cZ * sY + sZ * sX * cY,
+            sZ * cY + cZ * sX * sY,  cZ * cX, sZ * sY - cZ * sX * cY,
+            -cX * sY,                sX,      cX * cY
+        ];
+    }
+
     function handleOrientation(event) {
         if (!isLogging) return;
+        currentOri.a = event.alpha || 0;
+        currentOri.b = event.beta || 0;
+        currentOri.g = event.gamma || 0;
+
         let heading = event.webkitCompassHeading || (event.alpha ? 360 - event.alpha : 0);
         currentCompass = heading;
     }
@@ -274,10 +301,18 @@
         const lin = event.acceleration || {x:0, y:0, z:0};
         const rot = event.rotationRate || {alpha:0, beta:0, gamma:0};
         
+        // Utilize the rotation matrix to transform to Inertial Frame
+        const R = getRotationMatrix(currentOri.a, currentOri.b, currentOri.g);
+        
+        const ix = R[0] * lin.x + R[1] * lin.y + R[2] * lin.z;
+        const iy = R[3] * lin.x + R[4] * lin.y + R[5] * lin.z;
+        const iz = R[6] * lin.x + R[7] * lin.y + R[8] * lin.z;
+
         const data = {
             ts: Date.now(),
             ax: acc.x || 0, ay: acc.y || 0, az: acc.z || 0,
             lx: lin.x || 0, ly: lin.y || 0, lz: lin.z || 0,
+            ix: ix, iy: iy, iz: iz,
             ra: rot.alpha || 0, rb: rot.beta || 0, rg: rot.gamma || 0,
             lat: currentGps.lat, lon: currentGps.lon,
             gps_acc: currentGps.accuracy, comp: currentCompass
@@ -289,6 +324,9 @@
         elements.lx.textContent = data.lx.toFixed(3);
         elements.ly.textContent = data.ly.toFixed(3);
         elements.lz.textContent = data.lz.toFixed(3);
+        elements.ix.textContent = data.ix.toFixed(3);
+        elements.iy.textContent = data.iy.toFixed(3);
+        elements.iz.textContent = data.iz.toFixed(3);
         elements.ra.textContent = data.ra.toFixed(2);
         elements.rb.textContent = data.rb.toFixed(2);
         elements.rg.textContent = data.rg.toFixed(2);
@@ -360,8 +398,8 @@
         const tx = db.transaction([STORE_NAME], "readonly");
         tx.objectStore(STORE_NAME).getAll().onsuccess = (e) => {
             const data = e.target.result;
-            const headers = "timestamp_ms,acc_x,acc_y,acc_z,lin_x,lin_y,lin_z,rot_alpha,rot_beta,rot_gamma,lat,lon,gps_acc,gps_alt_acc,compass,comp_acc,mot_int\n";
-            const rows = data.map(r => `${r.ts},${r.ax},${r.ay},${r.az},${r.lx},${r.ly},${r.lz},${r.ra},${r.rb},${r.rg},${r.lat},${r.lon},${r.gps_acc},${r.gps_alt_acc},${r.comp},${r.comp_acc},${r.mot_int}`).join("\n");
+            const headers = "timestamp_ms,acc_x,acc_y,acc_z,lin_x,lin_y,lin_z,iner_x,iner_y,iner_z,rot_alpha,rot_beta,rot_gamma,lat,lon,gps_acc,gps_alt_acc,compass,comp_acc,mot_int\n";
+            const rows = data.map(r => `${r.ts},${r.ax},${r.ay},${r.az},${r.lx},${r.ly},${r.lz},${r.ix || 0},${r.iy || 0},${r.iz || 0},${r.ra},${r.rb},${r.rg},${r.lat},${r.lon},${r.gps_acc},${r.gps_alt_acc},${r.comp},${r.comp_acc || 0},${r.mot_int || 0}`).join("\n");
             const blob = new Blob([headers + rows], { type: 'text/csv' });
             const a = document.createElement('a');
             a.href = URL.createObjectURL(blob);
